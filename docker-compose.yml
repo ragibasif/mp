@@ -1,0 +1,18 @@
+services:
+  mp:
+    build: .
+    image: mp:latest
+    ports:
+      - "8501:8501"
+    volumes:
+      # Music library mounted read-only. Override with HOST_MUSIC=/path/to/music
+      # in your shell or a .env file alongside this compose file.
+      - ${HOST_MUSIC:-${HOME}/Music}:/music:ro
+      # Persistent feature + video cache across container restarts.
+      - mp_cache:/app/.cache
+    environment:
+      MUSIC_FOLDER: /music
+    restart: unless-stopped
+
+volumes:
+  mp_cache:

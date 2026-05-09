@@ -10,6 +10,7 @@ import cache as feat_cache
 
 DEFAULT_SR = 22050
 HOP_LENGTH = 512
+N_MELS = 32
 
 
 @dataclass(frozen=True, slots=True)
@@ -22,6 +23,7 @@ class Features:
     rms: np.ndarray          # (n_frames,)
     centroid: np.ndarray     # (n_frames,)
     chroma: np.ndarray       # (12, n_frames)
+    mel_db: np.ndarray       # (N_MELS, n_frames), dB-scaled
     times: np.ndarray        # (n_frames,)
 
 
@@ -42,6 +44,8 @@ def extract(path: str) -> Features:
     rms = librosa.feature.rms(y=y, hop_length=HOP_LENGTH)[0]
     centroid = librosa.feature.spectral_centroid(y=y, sr=sr, hop_length=HOP_LENGTH)[0]
     chroma = librosa.feature.chroma_stft(y=y, sr=sr, hop_length=HOP_LENGTH)
+    mel = librosa.feature.melspectrogram(y=y, sr=sr, hop_length=HOP_LENGTH, n_mels=N_MELS)
+    mel_db = librosa.power_to_db(mel, ref=np.max)
 
     n_frames = onset_env.shape[0]
     times = librosa.frames_to_time(np.arange(n_frames), sr=sr, hop_length=HOP_LENGTH)
@@ -55,6 +59,7 @@ def extract(path: str) -> Features:
         rms=_f32(rms),
         centroid=_f32(centroid),
         chroma=_f32(chroma),
+        mel_db=_f32(mel_db),
         times=_f32(times),
     )
 
@@ -69,6 +74,7 @@ def _features_from_npz(d: dict[str, np.ndarray]) -> Features:
         rms=d["rms"],
         centroid=d["centroid"],
         chroma=d["chroma"],
+        mel_db=d["mel_db"],
         times=d["times"],
     )
 
@@ -83,6 +89,7 @@ def _features_to_npz(f: Features) -> dict[str, np.ndarray]:
         "rms": f.rms,
         "centroid": f.centroid,
         "chroma": f.chroma,
+        "mel_db": f.mel_db,
         "times": f.times,
     }
 

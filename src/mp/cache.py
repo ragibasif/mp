@@ -5,9 +5,11 @@ from pathlib import Path
 
 import numpy as np
 
-CACHE_VERSION = "v1"
+CACHE_VERSION = "v2"
+VIDEO_VERSION = "v1"
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CACHE_DIR = REPO_ROOT / ".cache" / "features" / CACHE_VERSION
+VIDEO_DIR = REPO_ROOT / ".cache" / "videos" / VIDEO_VERSION
 
 
 def _hash_file(path: Path, chunk_size: int = 1 << 20) -> str:
@@ -41,3 +43,12 @@ def load(key: str) -> dict[str, np.ndarray] | None:
 
 def save(key: str, data: dict[str, np.ndarray]) -> None:
     np.savez_compressed(cache_path(key), **data)
+
+
+def video_path(audio_key: str, config_key: str) -> Path:
+    VIDEO_DIR.mkdir(parents=True, exist_ok=True)
+    return VIDEO_DIR / f"{audio_key}_{config_key}.mp4"
+
+
+def video_is_cached(audio_key: str, config_key: str) -> bool:
+    return (VIDEO_DIR / f"{audio_key}_{config_key}.mp4").exists()
