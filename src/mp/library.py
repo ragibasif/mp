@@ -59,3 +59,35 @@ def scan_library(folder: str) -> list[Track]:
     if not root.is_dir():
         return []
     return [_read_metadata(p) for p in sorted(_iter_audio_files(root))]
+
+
+def get_album_art(path: str) -> bytes | None:
+    """Return embedded album-art bytes, or None.
+
+    Handles three container conventions:
+      - ID3v2 (MP3) APIC frames
+      - FLAC .pictures list
+      - MP4/M4A 'covr' atom
+    """
+    try:
+        meta = MutagenFile(path)
+        if meta is None:
+            return None
+
+        if hasattr(meta, "pictures") and meta.pictures:
+            return meta.pictures[0].data
+
+        tags = getattr(meta, "tags", None)
+        if tags is None:
+            return None
+
+        for key in list(tags.keys()):
+            if key.startswith("APIC"):
+                return tags[key].data
+
+        covr = tags.get("covr") if hasattr(tags, "get") else None
+        if covr:
+            return bytes(covr[0])
+    except Exception:
+        pass
+    return None
