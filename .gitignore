@@ -8,3 +8,6 @@ wheels/
 
 # Virtual environments
 .venv
+
+# Feature extraction cache
+.cache/

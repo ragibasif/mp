@@ -5,10 +5,13 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 
+import matplotlib.pyplot as plt
 import pandas as pd
 import streamlit as st
 
+from features import Features, extract_cached, is_analyzed
 from library import Track, get_album_art, scan_library
+from viz import plot_chroma, plot_rms_with_beats
 
 st.set_page_config(
     page_title="mp",
@@ -28,6 +31,16 @@ def cached_art(path: str) -> bytes | None:
     return get_album_art(path)
 
 
+@st.cache_data(show_spinner=False)
+def cached_features(path: str, mtime: float) -> Features:
+    return extract_cached(path)
+
+
+@st.cache_data(show_spinner=False)
+def cached_is_analyzed(path: str, mtime: float) -> bool:
+    return is_analyzed(path)
+
+
 def tracks_to_df(tracks: list[Track]) -> pd.DataFrame:
     return pd.DataFrame(
         [
@@ -41,6 +54,11 @@ def tracks_to_df(tracks: list[Track]) -> pd.DataFrame:
             for t in tracks
         ]
     )
+
+
+def show_fig(fig) -> None:
+    st.pyplot(fig)
+    plt.close(fig)
 
 
 st.title("mp")
@@ -65,7 +83,7 @@ if not tracks:
 with st.sidebar:
     st.metric("Tracks", len(tracks))
 
-# Pre-allocate the now-playing slot so it renders ABOVE the library table
+# Pre-allocate slots so now-playing renders ABOVE the table
 # even though selection events come from the table below.
 nowplaying = st.container()
 st.divider()
@@ -80,16 +98,15 @@ event = st.dataframe(
     key="library_table",
 )
 
-# Selection-change guard: only act when the dataframe selection actually
-# changes. Without this, prev/next buttons get stomped on every rerun by
-# the dataframe's sticky selection.
+# Selection-change guard: only react when the dataframe selection actually
+# changes. Without this, prev/next buttons get stomped on every rerun.
 selected = tuple(event.selection.rows) if event.selection else ()
 prev_selected = st.session_state.get("_prev_table_sel", ())
 if selected and selected != prev_selected:
     st.session_state.current_index = int(selected[0])
 st.session_state._prev_table_sel = selected
 
-# Clamp index in case the library shrank (folder change, file removal).
+# Clamp index in case the library shrank.
 idx: int | None = st.session_state.get("current_index")
 if idx is not None and idx >= len(tracks):
     idx = None
@@ -142,3 +159,30 @@ with nowplaying:
                     on_click=_go_to,
                     args=(idx + 1,),
                 )
+
+        st.divider()
+        st.markdown("##### Audio analysis")
+
+        track_path_obj = Path(track.path)
+        mtime = track_path_obj.stat().st_mtime if track_path_obj.exists() else 0.0
+
+        if cached_is_analyzed(track.path, mtime):
+            feat = cached_features(track.path, mtime)
+            m1, m2, m3 = st.columns(3)
+            m1.metric("Tempo", f"{feat.tempo_bpm:.1f} BPM")
+            m2.metric("Beats", len(feat.beat_times))
+            m3.metric("Frames", len(feat.onset_env))
+
+            show_fig(plot_rms_with_beats(feat))
+            with st.expander("Show chroma"):
+                show_fig(plot_chroma(feat))
+        else:
+            st.caption(
+                "This track hasn't been analyzed yet. Extracting beats + spectral "
+                "features now will unlock generative visuals in Phase 4."
+            )
+            if st.button("Analyze track", type="primary", key=f"analyze_{idx}"):
+                with st.spinner("Extracting features… (5–15s the first time)"):
+                    cached_features(track.path, mtime)
+                    cached_is_analyzed.clear()
+                st.rerun()
